@@ -1,0 +1,18 @@
+{
+    "folders": [
+        {
+            "name": "LED Cloud Project",
+            "path": "."
+        },
+        {
+            "name": "ESP32-C3 Firmware",
+            "path": "firmware"
+        }
+    ],
+    "settings": {
+        "files.associations": {
+            "*.ino": "cpp",
+            "platformio.ini": "ini"
+        }
+    }
+}
