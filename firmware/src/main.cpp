@@ -31,6 +31,10 @@
 #define PWM_CHANNEL_WARM 0          // PWM channel for warm white
 #define PWM_CHANNEL_COOL 1          // PWM channel for cool white
 
+// Color Temperature Configuration
+#define CCT_WARM_KELVIN 2700        // Warm white color temperature in Kelvin
+#define CCT_COOL_KELVIN 6000        // Cool white color temperature in Kelvin
+
 // Virtual segment numbers for white strips (for lightning animations)
 #define SEGMENT_COOL_WHITE  4       // Cool white strip as virtual segment
 #define SEGMENT_WARM_WHITE  5       // Warm white strip as virtual segment
@@ -53,7 +57,8 @@ uint8_t coolWhiteBrightness = 0;
 #define LED_BLOCK_TOTAL 42
 bool ledBlocked[LED_BLOCK_TOTAL] = {false};  // Tracks which LEDs are currently being animated
 
-// Lightning animation state
+// Lightning animation state - support up to 5 concurrent animations
+#define MAX_LIGHTNING_ANIMATIONS 5
 struct LightningState {
     bool active;
     uint8_t segment;
@@ -67,7 +72,14 @@ struct LightningState {
     CRGB segmentBackup[SEGMENT_SIZE];
     uint8_t warmWhiteBackup;
     uint8_t coolWhiteBackup;
-} lightning = {false, 0, 0, 50, 100, 200, 1.0f, CRGB::White, {}, 0, 0};
+};
+LightningState lightning[MAX_LIGHTNING_ANIMATIONS] = {
+    {false, 0, 0, 50, 100, 200, 1.0f, CRGB::White, {}, 0, 0},
+    {false, 0, 0, 50, 100, 200, 1.0f, CRGB::White, {}, 0, 0},
+    {false, 0, 0, 50, 100, 200, 1.0f, CRGB::White, {}, 0, 0},
+    {false, 0, 0, 50, 100, 200, 1.0f, CRGB::White, {}, 0, 0},
+    {false, 0, 0, 50, 100, 200, 1.0f, CRGB::White, {}, 0, 0}
+};
 
 // Pattern event structure
 struct PatternEvent {
@@ -120,6 +132,11 @@ void blockLEDs(uint8_t startLED, uint8_t count);
 void blockSegment(uint8_t segment);
 void unblockLEDs(uint8_t startLED, uint8_t count);
 void unblockSegment(uint8_t segment);
+
+// Lightning animation helper functions
+int8_t findAvailableLightningSlot();
+bool anyLightningActive();
+void stopAllLightning();
 
 #ifdef DEMO_MODE
 void runDemoMode();
@@ -262,10 +279,32 @@ void processSerialCommand() {
         Serial.println("{\"status\":\"ok\",\"cmd\":\"white\"}");
         Serial.flush();
     }
+    else if (strcmp(cmd, "cctWhite") == 0) {
+        // CCT-based white control: specify target color temperature and intensity
+        uint16_t targetCCT = doc["cct"] | 3500;  // Default to mid-range 3500K
+        float intensity = doc["intensity"] | 1.0f;
+        
+        // Clamp CCT to valid range (2700K - 6000K)
+        targetCCT = constrain(targetCCT, CCT_WARM_KELVIN, CCT_COOL_KELVIN);
+        intensity = constrain(intensity, 0.0f, 1.0f);
+        
+        // Calculate warm/cool mix using linear interpolation
+        // cool_ratio increases as temperature rises from 2700K to 6000K
+        float cool_ratio = (float)(targetCCT - CCT_WARM_KELVIN) / (float)(CCT_COOL_KELVIN - CCT_WARM_KELVIN);
+        float warm_ratio = 1.0f - cool_ratio;
+        
+        // Apply intensity to both channels
+        float warm = warm_ratio * intensity;
+        float cool = cool_ratio * intensity;
+        
+        updateWhiteStrips(warm, cool);
+        Serial.println("{\"status\":\"ok\",\"cmd\":\"cctWhite\"}");
+        Serial.flush();
+    }
     else if (strcmp(cmd, "reset") == 0) {
         safeDefaultState();
-        lightning.active = false;  // Stop any active animations
-        stopPattern();             // Stop any active pattern
+        stopAllLightning();  // Stop all lightning animations
+        stopPattern();       // Stop any active pattern
         // Clear all LED blocking flags
         for (uint8_t i = 0; i < LED_BLOCK_TOTAL; i++) {
             ledBlocked[i] = false;
@@ -274,6 +313,13 @@ void processSerialCommand() {
         Serial.flush();
     }
     else if (strcmp(cmd, "lightning") == 0) {
+        // Check if we have available animation slots
+        if (findAvailableLightningSlot() == -1) {
+            Serial.println("{\"status\":\"error\",\"message\":\"Max concurrent animations reached (5)\"}" );
+            Serial.flush();
+            return;
+        }
+        
         uint8_t segment = doc["segment"] | 0;
         
         // Check for animation collision on this specific segment
@@ -374,6 +420,13 @@ void processSerialCommand() {
         Serial.flush();
     }
     else if (strcmp(cmd, "randomSegFlash") == 0) {
+        // Check if we have available animation slots
+        if (findAvailableLightningSlot() == -1) {
+            Serial.println("{\"status\":\"error\",\"message\":\"Max concurrent animations reached (5)\"}" );
+            Serial.flush();
+            return;
+        }
+        
         uint8_t intensity = doc["intensity"] | 5;  // Default intensity 5 (mid-range)
         intensity = constrain(intensity, 1, 10);   // Clamp to 1-10
         
@@ -435,9 +488,9 @@ void processSerialCommand() {
         }
         
         // Scale number of LEDs based on intensity
-        // Intensity 1: 1-2 LEDs, Intensity 10: 15-25 LEDs
-        uint8_t minLEDs = map(intensity, 1, 10, 1, 15);
-        uint8_t maxLEDs = map(intensity, 1, 10, 2, 25);
+        // Intensity 1: 1-2 LEDs, Intensity 10: 5-20 LEDs
+        uint8_t minLEDs = map(intensity, 1, 10, 1, 5);
+        uint8_t maxLEDs = map(intensity, 1, 10, 2, 20);
         uint8_t numLEDs = random(minLEDs, maxLEDs + 1);
         numLEDs = constrain(numLEDs, 1, LED_COUNT);
         
@@ -829,104 +882,146 @@ void unblockSegment(uint8_t segment) {
 }
 
 // ============================================================================
+// LIGHTNING ANIMATION HELPER FUNCTIONS
+// ============================================================================
+
+int8_t findAvailableLightningSlot() {
+    // Find the first available (inactive) lightning animation slot
+    // Returns slot index (0-4) or -1 if all slots are in use
+    for (uint8_t i = 0; i < MAX_LIGHTNING_ANIMATIONS; i++) {
+        if (!lightning[i].active) {
+            return i;
+        }
+    }
+    return -1;  // All slots are in use
+}
+
+bool anyLightningActive() {
+    // Check if any lightning animation is currently active
+    for (uint8_t i = 0; i < MAX_LIGHTNING_ANIMATIONS; i++) {
+        if (lightning[i].active) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void stopAllLightning() {
+    // Stop all lightning animations and unblock their segments
+    for (uint8_t i = 0; i < MAX_LIGHTNING_ANIMATIONS; i++) {
+        if (lightning[i].active) {
+            unblockSegment(lightning[i].segment);
+            lightning[i].active = false;
+        }
+    }
+}
+
+// ============================================================================
 // LIGHTNING ANIMATION
 // ============================================================================
 
 void startLightning(uint8_t segment, CRGB color, unsigned long attack, unsigned long plateau, unsigned long release, float intensity) {
     if (segment > SEGMENT_WARM_WHITE) return;  // Max segment is 5 (warm white)
     
+    // Find an available lightning slot
+    int8_t slot = findAvailableLightningSlot();
+    if (slot == -1) return;  // No slots available
+    
     // Block the segment to prevent collisions
     blockSegment(segment);
     
-    lightning.active = true;
-    lightning.segment = segment;
-    lightning.startTime = millis();
-    lightning.attackMs = attack;
-    lightning.plateauMs = plateau;
-    lightning.releaseMs = release;
-    lightning.intensity = intensity;
-    lightning.color = color;
+    lightning[slot].active = true;
+    lightning[slot].segment = segment;
+    lightning[slot].startTime = millis();
+    lightning[slot].attackMs = attack;
+    lightning[slot].plateauMs = plateau;
+    lightning[slot].releaseMs = release;
+    lightning[slot].intensity = intensity;
+    lightning[slot].color = color;
     
     // Backup current state before lightning flash
     if (segment < NUM_SEGMENTS) {
         // RGB LED segment (0-3): backup segment colors
         uint8_t startLED = segment * SEGMENT_SIZE;
         for (uint8_t i = 0; i < SEGMENT_SIZE && (startLED + i) < LED_COUNT; i++) {
-            lightning.segmentBackup[i] = leds[startLED + i];
+            lightning[slot].segmentBackup[i] = leds[startLED + i];
         }
     } else if (segment == SEGMENT_COOL_WHITE) {
         // Cool white strip: backup current brightness
-        lightning.coolWhiteBackup = coolWhiteBrightness;
+        lightning[slot].coolWhiteBackup = coolWhiteBrightness;
     } else if (segment == SEGMENT_WARM_WHITE) {
         // Warm white strip: backup current brightness
-        lightning.warmWhiteBackup = warmWhiteBrightness;
+        lightning[slot].warmWhiteBackup = warmWhiteBrightness;
     }
 }
 
 void updateLightningAnimation() {
-    if (!lightning.active) return;
-    
-    unsigned long elapsed = millis() - lightning.startTime;
-    unsigned long totalDuration = lightning.attackMs + lightning.plateauMs + lightning.releaseMs;
-    
-    // Check if animation is complete
-    if (elapsed >= totalDuration) {
-        // Restore previous state
-        if (lightning.segment < NUM_SEGMENTS) {
-            // RGB LED segment: restore backed up colors
-            uint8_t startLED = lightning.segment * SEGMENT_SIZE;
-            for (uint8_t i = 0; i < SEGMENT_SIZE && (startLED + i) < LED_COUNT; i++) {
-                leds[startLED + i] = lightning.segmentBackup[i];
+    // Process all active lightning animations
+    for (uint8_t slot = 0; slot < MAX_LIGHTNING_ANIMATIONS; slot++) {
+        if (!lightning[slot].active) continue;  // Skip inactive slots
+        
+        unsigned long elapsed = millis() - lightning[slot].startTime;
+        unsigned long totalDuration = lightning[slot].attackMs + lightning[slot].plateauMs + lightning[slot].releaseMs;
+        
+        // Check if animation is complete
+        if (elapsed >= totalDuration) {
+            // Restore previous state
+            if (lightning[slot].segment < NUM_SEGMENTS) {
+                // RGB LED segment: restore backed up colors
+                uint8_t startLED = lightning[slot].segment * SEGMENT_SIZE;
+                for (uint8_t i = 0; i < SEGMENT_SIZE && (startLED + i) < LED_COUNT; i++) {
+                    leds[startLED + i] = lightning[slot].segmentBackup[i];
+                }
+                FastLED.show();
+            } else if (lightning[slot].segment == SEGMENT_COOL_WHITE) {
+                // Cool white strip: restore previous brightness
+                coolWhiteBrightness = lightning[slot].coolWhiteBackup;
+                ledcWrite(COOL_WHITE_PIN, coolWhiteBrightness);
+            } else if (lightning[slot].segment == SEGMENT_WARM_WHITE) {
+                // Warm white strip: restore previous brightness
+                warmWhiteBrightness = lightning[slot].warmWhiteBackup;
+                ledcWrite(WARM_WHITE_PIN, warmWhiteBrightness);
             }
-            FastLED.show();
-        } else if (lightning.segment == SEGMENT_COOL_WHITE) {
-            // Cool white strip: restore previous brightness
-            coolWhiteBrightness = lightning.coolWhiteBackup;
-            ledcWrite(COOL_WHITE_PIN, coolWhiteBrightness);
-        } else if (lightning.segment == SEGMENT_WARM_WHITE) {
-            // Warm white strip: restore previous brightness
-            warmWhiteBrightness = lightning.warmWhiteBackup;
-            ledcWrite(WARM_WHITE_PIN, warmWhiteBrightness);
+            
+            // Unblock the segment
+            unblockSegment(lightning[slot].segment);
+            lightning[slot].active = false;
+            continue;  // Move to next slot
         }
         
-        // Unblock the segment
-        unblockSegment(lightning.segment);
-        lightning.active = false;
-        return;
-    }
-    
-    float brightness = 0.0f;
-    
-    // Attack phase (ramp up)
-    if (elapsed < lightning.attackMs) {
-        brightness = (float)elapsed / (float)lightning.attackMs;
-    }
-    // Plateau phase (hold at full brightness)
-    else if (elapsed < lightning.attackMs + lightning.plateauMs) {
-        brightness = 1.0f;
-    }
-    // Release phase (ramp down)
-    else {
-        unsigned long releaseElapsed = elapsed - lightning.attackMs - lightning.plateauMs;
-        brightness = 1.0f - ((float)releaseElapsed / (float)lightning.releaseMs);
-    }
-    
-    // Apply brightness with intensity scaling and update segment
-    float finalBrightness = brightness * lightning.intensity;
-    
-    if (lightning.segment < NUM_SEGMENTS) {
-        // RGB LED segment (0-3): apply brightness to color
-        CRGB scaledColor = lightning.color;
-        scaledColor.nscale8_video((uint8_t)(finalBrightness * 255));
-        setSegmentColor(lightning.segment, scaledColor);
-    } else if (lightning.segment == SEGMENT_COOL_WHITE) {
-        // Cool white strip: apply brightness to PWM
-        uint8_t pwmValue = (uint8_t)(finalBrightness * 255);
-        ledcWrite(COOL_WHITE_PIN, pwmValue);
-    } else if (lightning.segment == SEGMENT_WARM_WHITE) {
-        // Warm white strip: apply brightness to PWM
-        uint8_t pwmValue = (uint8_t)(finalBrightness * 255);
-        ledcWrite(WARM_WHITE_PIN, pwmValue);
+        float brightness = 0.0f;
+        
+        // Attack phase (ramp up)
+        if (elapsed < lightning[slot].attackMs) {
+            brightness = (float)elapsed / (float)lightning[slot].attackMs;
+        }
+        // Plateau phase (hold at full brightness)
+        else if (elapsed < lightning[slot].attackMs + lightning[slot].plateauMs) {
+            brightness = 1.0f;
+        }
+        // Release phase (ramp down)
+        else {
+            unsigned long releaseElapsed = elapsed - lightning[slot].attackMs - lightning[slot].plateauMs;
+            brightness = 1.0f - ((float)releaseElapsed / (float)lightning[slot].releaseMs);
+        }
+        
+        // Apply brightness with intensity scaling and update segment
+        float finalBrightness = brightness * lightning[slot].intensity;
+        
+        if (lightning[slot].segment < NUM_SEGMENTS) {
+            // RGB LED segment (0-3): apply brightness to color
+            CRGB scaledColor = lightning[slot].color;
+            scaledColor.nscale8_video((uint8_t)(finalBrightness * 255));
+            setSegmentColor(lightning[slot].segment, scaledColor);
+        } else if (lightning[slot].segment == SEGMENT_COOL_WHITE) {
+            // Cool white strip: apply brightness to PWM
+            uint8_t pwmValue = (uint8_t)(finalBrightness * 255);
+            ledcWrite(COOL_WHITE_PIN, pwmValue);
+        } else if (lightning[slot].segment == SEGMENT_WARM_WHITE) {
+            // Warm white strip: apply brightness to PWM
+            uint8_t pwmValue = (uint8_t)(finalBrightness * 255);
+            ledcWrite(WARM_WHITE_PIN, pwmValue);
+        }
     }
 }
 
@@ -960,11 +1055,10 @@ void updatePatternPlayback() {
     while (pattern.currentEventIndex < pattern.eventCount && 
            elapsed >= pattern.events[pattern.currentEventIndex].timeMs) {
         
-        // Only trigger if no lightning is currently active
-        // This prevents overlapping flashes from interfering
-        if (!lightning.active) {
-            PatternEvent* event = &pattern.events[pattern.currentEventIndex];
-            
+        // Only trigger if we have an available lightning slot and the segment isn't blocked
+        PatternEvent* event = &pattern.events[pattern.currentEventIndex];
+        
+        if (findAvailableLightningSlot() != -1 && checkSegmentAvailable(event->segment)) {
             startLightning(
                 event->segment,
                 event->color,

@@ -187,6 +187,62 @@ class LightningControlGUI:
         ttk.Button(solid_btn_frame, text="Set All Segments", 
                   command=self.set_solid_color_all).pack(side="left", padx=5, expand=True, fill="x")
         
+        # ===== CCT White Controls =====
+        cct_white_frame = ttk.LabelFrame(self.root, text="CCT White Control (Static Strips)", padding=10)
+        cct_white_frame.pack(fill="x", padx=10, pady=5)
+        
+        # CCT Temperature slider (2700K - 6000K)
+        cct_temp_frame = ttk.Frame(cct_white_frame)
+        cct_temp_frame.pack(fill="x", pady=5)
+        
+        ttk.Label(cct_temp_frame, text="Temperature:", width=12).pack(side="left")
+        self.cct_temp_var = tk.IntVar(value=3500)
+        cct_temp_slider = ttk.Scale(cct_temp_frame, from_=2700, to=6000, orient="horizontal", 
+                                    variable=self.cct_temp_var)
+        cct_temp_slider.pack(side="left", fill="x", expand=True, padx=5)
+        self.cct_temp_label = ttk.Label(cct_temp_frame, text="3500K", width=8)
+        self.cct_temp_label.pack(side="left")
+        self.cct_temp_var.trace_add("write", lambda *args: 
+                                   self.cct_temp_label.config(text=f"{self.cct_temp_var.get()}K"))
+        
+        # CCT Intensity slider (0-100%)
+        cct_intensity_frame = ttk.Frame(cct_white_frame)
+        cct_intensity_frame.pack(fill="x", pady=5)
+        
+        ttk.Label(cct_intensity_frame, text="Intensity:", width=12).pack(side="left")
+        self.cct_intensity_var = tk.DoubleVar(value=1.0)
+        cct_intensity_slider = ttk.Scale(cct_intensity_frame, from_=0.0, to=1.0, orient="horizontal", 
+                                        variable=self.cct_intensity_var)
+        cct_intensity_slider.pack(side="left", fill="x", expand=True, padx=5)
+        self.cct_intensity_label = ttk.Label(cct_intensity_frame, text="100%", width=8)
+        self.cct_intensity_label.pack(side="left")
+        self.cct_intensity_var.trace_add("write", lambda *args: 
+                                        self.cct_intensity_label.config(text=f"{int(self.cct_intensity_var.get()*100)}%"))
+        
+        # CCT preset buttons
+        cct_preset_frame = ttk.Frame(cct_white_frame)
+        cct_preset_frame.pack(fill="x", pady=5)
+        
+        ttk.Label(cct_preset_frame, text="Presets:").pack(side="left", padx=5)
+        cct_presets = [
+            ("Warm", 2700),
+            ("Incandescent", 3000),
+            ("Neutral", 3500),
+            ("Cool White", 4000),
+            ("Daylight", 5000),
+            ("Cool", 6000)
+        ]
+        for name, temp in cct_presets:
+            ttk.Button(cct_preset_frame, text=name, width=12,
+                      command=lambda t=temp: self.set_cct_preset(t)).pack(side="left", padx=2)
+        
+        # CCT action button
+        cct_btn_frame = ttk.Frame(cct_white_frame)
+        cct_btn_frame.pack(fill="x", pady=5)
+        
+        ttk.Button(cct_btn_frame, text="Apply CCT White", 
+                  command=self.send_cct_white).pack(fill="x", padx=5)
+        
         # ===== Color Selection =====
         color_frame = ttk.LabelFrame(self.root, text="Lightning Flash Color", padding=10)
         color_frame.pack(fill="x", padx=10, pady=5)
@@ -414,6 +470,23 @@ class LightningControlGUI:
             cmd["v"] = self.solid_v_var.get()
         elif mode == "preset":
             cmd["preset"] = self.preset_color_var.get()
+        
+        self.send_command(cmd)
+    
+    def set_cct_preset(self, temp):
+        """Set CCT temperature to a preset value."""
+        self.cct_temp_var.set(temp)
+    
+    def send_cct_white(self):
+        """Send CCT white command with current settings."""
+        temp = self.cct_temp_var.get()
+        intensity = self.cct_intensity_var.get()
+        
+        cmd = {
+            "cmd": "cctWhite",
+            "cct": temp,
+            "intensity": intensity
+        }
         
         self.send_command(cmd)
     
