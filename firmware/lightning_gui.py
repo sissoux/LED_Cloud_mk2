@@ -107,8 +107,88 @@ class LightningControlGUI:
             ttk.Radiobutton(segment_frame, text=seg_label, variable=self.segment_var, 
                            value=seg_num).pack(anchor="w", pady=2)
         
+        # ===== Solid Color Controls =====
+        solid_color_frame = ttk.LabelFrame(self.root, text="Base Solid Color (Applied Before Lightning)", padding=10)
+        solid_color_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Color mode selection
+        mode_frame = ttk.Frame(solid_color_frame)
+        mode_frame.pack(fill="x", pady=5)
+        
+        ttk.Label(mode_frame, text="Color Mode:").pack(side="left", padx=5)
+        self.solid_color_mode = tk.StringVar(value="rgb")
+        ttk.Radiobutton(mode_frame, text="RGB", variable=self.solid_color_mode, 
+                       value="rgb", command=self.toggle_solid_color_mode).pack(side="left", padx=5)
+        ttk.Radiobutton(mode_frame, text="HSV", variable=self.solid_color_mode, 
+                       value="hsv", command=self.toggle_solid_color_mode).pack(side="left", padx=5)
+        ttk.Radiobutton(mode_frame, text="Preset", variable=self.solid_color_mode, 
+                       value="preset", command=self.toggle_solid_color_mode).pack(side="left", padx=5)
+        
+        # RGB controls (visible by default)
+        self.rgb_solid_frame = ttk.Frame(solid_color_frame)
+        self.rgb_solid_frame.pack(fill="x", pady=5)
+        
+        self.solid_r_var = tk.IntVar(value=255)
+        self.solid_g_var = tk.IntVar(value=0)
+        self.solid_b_var = tk.IntVar(value=0)
+        
+        for label, var, color in [("Red", self.solid_r_var, "#ff0000"), 
+                                  ("Green", self.solid_g_var, "#00ff00"), 
+                                  ("Blue", self.solid_b_var, "#0000ff")]:
+            frame = ttk.Frame(self.rgb_solid_frame)
+            frame.pack(fill="x", pady=2)
+            ttk.Label(frame, text=f"{label}:", width=6).pack(side="left")
+            slider = ttk.Scale(frame, from_=0, to=255, orient="horizontal", variable=var)
+            slider.pack(side="left", fill="x", expand=True, padx=5)
+            value_label = ttk.Label(frame, text="255", width=4)
+            value_label.pack(side="left")
+            var.trace_add("write", lambda *args, lbl=value_label, v=var: 
+                         lbl.config(text=str(v.get())))
+        
+        # HSV controls (hidden by default)
+        self.hsv_solid_frame = ttk.Frame(solid_color_frame)
+        
+        self.solid_h_var = tk.IntVar(value=0)
+        self.solid_s_var = tk.IntVar(value=255)
+        self.solid_v_var = tk.IntVar(value=255)
+        
+        for label, var, max_val in [("Hue", self.solid_h_var, 255), 
+                                    ("Saturation", self.solid_s_var, 255), 
+                                    ("Value", self.solid_v_var, 255)]:
+            frame = ttk.Frame(self.hsv_solid_frame)
+            frame.pack(fill="x", pady=2)
+            ttk.Label(frame, text=f"{label}:", width=10).pack(side="left")
+            slider = ttk.Scale(frame, from_=0, to=max_val, orient="horizontal", variable=var)
+            slider.pack(side="left", fill="x", expand=True, padx=5)
+            value_label = ttk.Label(frame, text=str(var.get()), width=4)
+            value_label.pack(side="left")
+            var.trace_add("write", lambda *args, lbl=value_label, v=var: 
+                         lbl.config(text=str(v.get())))
+        
+        # Preset controls (hidden by default)
+        self.preset_solid_frame = ttk.Frame(solid_color_frame)
+        
+        ttk.Label(self.preset_solid_frame, text="Preset Color:").pack(side="left", padx=5)
+        self.preset_color_var = tk.StringVar(value="red")
+        preset_colors = ["red", "green", "blue", "white", "yellow", "cyan", "magenta", 
+                        "orange", "purple", "pink", "lime", "aqua", "navy", "teal", 
+                        "olive", "maroon", "silver", "gray", "gold", "indigo", "violet",
+                        "brown", "crimson", "coral", "turquoise", "salmon", "khaki", 
+                        "plum", "orchid", "black"]
+        ttk.Combobox(self.preset_solid_frame, textvariable=self.preset_color_var, 
+                    values=preset_colors, state="readonly", width=15).pack(side="left", padx=5)
+        
+        # Solid color action buttons
+        solid_btn_frame = ttk.Frame(solid_color_frame)
+        solid_btn_frame.pack(fill="x", pady=5)
+        
+        ttk.Button(solid_btn_frame, text="Set Selected Segment", 
+                  command=self.set_solid_color).pack(side="left", padx=5, expand=True, fill="x")
+        ttk.Button(solid_btn_frame, text="Set All Segments", 
+                  command=self.set_solid_color_all).pack(side="left", padx=5, expand=True, fill="x")
+        
         # ===== Color Selection =====
-        color_frame = ttk.LabelFrame(self.root, text="Color Selection (RGB Segments Only)", padding=10)
+        color_frame = ttk.LabelFrame(self.root, text="Lightning Flash Color", padding=10)
         color_frame.pack(fill="x", padx=10, pady=5)
         
         # Color preview
@@ -206,6 +286,35 @@ class LightningControlGUI:
         ttk.Button(utility_frame, text="Test All Segments", 
                   command=self.test_all_segments).pack(side="left", padx=5, expand=True, fill="x")
         
+        # Random flash buttons
+        random_frame = ttk.LabelFrame(button_frame, text="Random Flash Effects", padding=5)
+        random_frame.pack(fill="x", pady=5)
+        
+        # Intensity selector for random flashes
+        intensity_select_frame = ttk.Frame(random_frame)
+        intensity_select_frame.pack(fill="x", pady=5)
+        
+        ttk.Label(intensity_select_frame, text="Random Intensity (1-10):").pack(side="left", padx=5)
+        self.random_intensity_var = tk.IntVar(value=5)
+        ttk.Scale(intensity_select_frame, from_=1, to=10, orient="horizontal", 
+                 variable=self.random_intensity_var).pack(side="left", fill="x", expand=True, padx=5)
+        self.random_intensity_label = ttk.Label(intensity_select_frame, text="5", width=3)
+        self.random_intensity_label.pack(side="left")
+        self.random_intensity_var.trace_add("write", lambda *args: 
+                                           self.random_intensity_label.config(text=str(self.random_intensity_var.get())))
+        
+        random_btn_frame = ttk.Frame(random_frame)
+        random_btn_frame.pack(fill="x", pady=5)
+        
+        ttk.Button(random_btn_frame, text="Random Segment Flash", 
+                  command=self.random_seg_flash).pack(side="left", padx=5, expand=True, fill="x")
+        
+        ttk.Button(random_btn_frame, text="Random LEDs Flash", 
+                  command=self.random_flash).pack(side="left", padx=5, expand=True, fill="x")
+        
+        ttk.Button(random_btn_frame, text="⚡ FULL FLASH ⚡", 
+                  command=self.full_flash).pack(side="left", padx=5, expand=True, fill="x")
+        
         # ===== Presets =====
         preset_frame = ttk.LabelFrame(self.root, text="Quick Presets", padding=10)
         preset_frame.pack(fill="x", padx=10, pady=5)
@@ -251,6 +360,62 @@ class LightningControlGUI:
         self.release_var.set(release)
         self.intensity_var.set(intensity)
         self.status_label.config(text="Preset applied", foreground="blue")
+    
+    def toggle_solid_color_mode(self):
+        """Toggle between RGB, HSV, and Preset color modes for solid color."""
+        mode = self.solid_color_mode.get()
+        
+        # Hide all frames
+        self.rgb_solid_frame.pack_forget()
+        self.hsv_solid_frame.pack_forget()
+        self.preset_solid_frame.pack_forget()
+        
+        # Show selected frame
+        if mode == "rgb":
+            self.rgb_solid_frame.pack(fill="x", pady=5)
+        elif mode == "hsv":
+            self.hsv_solid_frame.pack(fill="x", pady=5)
+        elif mode == "preset":
+            self.preset_solid_frame.pack(fill="x", pady=5)
+    
+    def set_solid_color(self):
+        """Set solid color for selected segment."""
+        segment = self.segment_var.get()
+        mode = self.solid_color_mode.get()
+        
+        cmd = {"cmd": "solid_color", "segment": segment}
+        
+        if mode == "rgb":
+            cmd["r"] = self.solid_r_var.get()
+            cmd["g"] = self.solid_g_var.get()
+            cmd["b"] = self.solid_b_var.get()
+        elif mode == "hsv":
+            cmd["h"] = self.solid_h_var.get()
+            cmd["s"] = self.solid_s_var.get()
+            cmd["v"] = self.solid_v_var.get()
+        elif mode == "preset":
+            cmd["preset"] = self.preset_color_var.get()
+        
+        self.send_command(cmd)
+    
+    def set_solid_color_all(self):
+        """Set solid color for all segments."""
+        mode = self.solid_color_mode.get()
+        
+        cmd = {"cmd": "solid_color", "segment": 255}  # 255 = all segments
+        
+        if mode == "rgb":
+            cmd["r"] = self.solid_r_var.get()
+            cmd["g"] = self.solid_g_var.get()
+            cmd["b"] = self.solid_b_var.get()
+        elif mode == "hsv":
+            cmd["h"] = self.solid_h_var.get()
+            cmd["s"] = self.solid_s_var.get()
+            cmd["v"] = self.solid_v_var.get()
+        elif mode == "preset":
+            cmd["preset"] = self.preset_color_var.get()
+        
+        self.send_command(cmd)
     
     def strike_lightning(self):
         """Send lightning command with current settings."""
@@ -335,6 +500,51 @@ class LightningControlGUI:
             time.sleep(0.5)
         
         self.status_label.config(text="All segments tested", foreground="green")
+    
+    def random_seg_flash(self):
+        """Trigger random segment flash."""
+        intensity = self.random_intensity_var.get()
+        r, g, b = self.current_color
+        
+        cmd = {
+            "cmd": "randomSegFlash",
+            "intensity": intensity,
+            "r": r,
+            "g": g,
+            "b": b
+        }
+        
+        self.send_command(cmd)
+    
+    def random_flash(self):
+        """Trigger random LEDs flash."""
+        intensity = self.random_intensity_var.get()
+        r, g, b = self.current_color
+        
+        cmd = {
+            "cmd": "randomFlash",
+            "intensity": intensity,
+            "r": r,
+            "g": g,
+            "b": b
+        }
+        
+        self.send_command(cmd)
+    
+    def full_flash(self):
+        """Trigger full flash on ALL LEDs and white strips."""
+        intensity = self.random_intensity_var.get()
+        r, g, b = self.current_color
+        
+        cmd = {
+            "cmd": "fullFlash",
+            "intensity": intensity,
+            "r": r,
+            "g": g,
+            "b": b
+        }
+        
+        self.send_command(cmd)
     
     def close(self):
         """Clean up on exit."""
