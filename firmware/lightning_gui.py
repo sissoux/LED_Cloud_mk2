@@ -24,7 +24,7 @@ class LightningControlGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Cloud Lamp Lightning Control")
-        self.root.geometry("600x900")
+        self.root.geometry("1100x700")  # Wider, shorter window
         self.root.resizable(True, True)
         
         self.serial_port = None
@@ -74,76 +74,81 @@ class LightningControlGUI:
             self.status_label.config(text="✗ Not connected", foreground="orange")
     
     def create_widgets(self):
-        """Create all GUI elements."""
+        """Create all GUI elements in a compact 2-column layout."""
         
-        # ===== Connection Status =====
-        status_frame = ttk.LabelFrame(self.root, text="Connection Status", padding=10)
-        status_frame.pack(fill="x", padx=10, pady=5)
+        # ===== Connection Status (top, full width) =====
+        status_frame = ttk.LabelFrame(self.root, text="Connection Status", padding=5)
+        status_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
         
         connection_text = f"Connected to {SERIAL_PORT}" if self.serial_port else f"Not connected to {SERIAL_PORT}"
         connection_color = "green" if self.serial_port else "red"
         ttk.Label(status_frame, text=connection_text, foreground=connection_color, 
-                 font=("Arial", 10, "bold")).pack()
+                 font=("Arial", 9, "bold")).pack(side="left", padx=10)
         
         self.status_label = ttk.Label(status_frame, text="Ready", foreground="blue")
-        self.status_label.pack()
+        self.status_label.pack(side="left", padx=10)
         
-        # ===== Segment Selection =====
-        segment_frame = ttk.LabelFrame(self.root, text="Segment Selection", padding=10)
-        segment_frame.pack(fill="x", padx=10, pady=5)
+        # Configure grid weights
+        self.root.columnconfigure(0, weight=1)
+        self.root.columnconfigure(1, weight=1)
+        
+        # ===== LEFT COLUMN =====
+        left_column = ttk.Frame(self.root)
+        left_column.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        
+        # Segment Selection (compact horizontal layout)
+        segment_frame = ttk.LabelFrame(left_column, text="Segment", padding=5)
+        segment_frame.pack(fill="x", pady=(0, 5))
         
         self.segment_var = tk.IntVar(value=0)
         
-        segments_info = [
-            (0, "Segment 0 (RGB LEDs 0-9)"),
-            (1, "Segment 1 (RGB LEDs 10-19)"),
-            (2, "Segment 2 (RGB LEDs 20-29)"),
-            (3, "Segment 3 (RGB LEDs 30-39)"),
-            (4, "Segment 4 (Cool White Strip)"),
-            (5, "Segment 5 (Warm White Strip)")
-        ]
+        # First row: RGB segments
+        rgb_frame = ttk.Frame(segment_frame)
+        rgb_frame.pack(fill="x")
+        for i in range(4):
+            ttk.Radiobutton(rgb_frame, text=f"S{i}", variable=self.segment_var, 
+                           value=i, width=4).pack(side="left", padx=2)
         
-        for seg_num, seg_label in segments_info:
-            ttk.Radiobutton(segment_frame, text=seg_label, variable=self.segment_var, 
-                           value=seg_num).pack(anchor="w", pady=2)
+        # Second row: White segments
+        white_frame = ttk.Frame(segment_frame)
+        white_frame.pack(fill="x")
+        ttk.Radiobutton(white_frame, text="Cool W", variable=self.segment_var, 
+                       value=4, width=7).pack(side="left", padx=2)
+        ttk.Radiobutton(white_frame, text="Warm W", variable=self.segment_var, 
+                       value=5, width=7).pack(side="left", padx=2)
         
-        # ===== Solid Color Controls =====
-        solid_color_frame = ttk.LabelFrame(self.root, text="Base Solid Color (Applied Before Lightning)", padding=10)
-        solid_color_frame.pack(fill="x", padx=10, pady=5)
+        # Solid Color Controls (compact)
+        solid_color_frame = ttk.LabelFrame(left_column, text="Base Solid Color", padding=5)
+        solid_color_frame.pack(fill="x", pady=(0, 5))
         
         # Color mode selection
         mode_frame = ttk.Frame(solid_color_frame)
-        mode_frame.pack(fill="x", pady=5)
+        mode_frame.pack(fill="x", pady=2)
         
-        ttk.Label(mode_frame, text="Color Mode:").pack(side="left", padx=5)
         self.solid_color_mode = tk.StringVar(value="rgb")
         ttk.Radiobutton(mode_frame, text="RGB", variable=self.solid_color_mode, 
-                       value="rgb", command=self.toggle_solid_color_mode).pack(side="left", padx=5)
+                       value="rgb", command=self.toggle_solid_color_mode).pack(side="left", padx=2)
         ttk.Radiobutton(mode_frame, text="HSV", variable=self.solid_color_mode, 
-                       value="hsv", command=self.toggle_solid_color_mode).pack(side="left", padx=5)
+                       value="hsv", command=self.toggle_solid_color_mode).pack(side="left", padx=2)
         ttk.Radiobutton(mode_frame, text="Preset", variable=self.solid_color_mode, 
-                       value="preset", command=self.toggle_solid_color_mode).pack(side="left", padx=5)
+                       value="preset", command=self.toggle_solid_color_mode).pack(side="left", padx=2)
         
-        # RGB controls (visible by default)
+        # RGB controls (visible by default) - compact sliders
         self.rgb_solid_frame = ttk.Frame(solid_color_frame)
-        self.rgb_solid_frame.pack(fill="x", pady=5)
+        self.rgb_solid_frame.pack(fill="x", pady=2)
         
         self.solid_r_var = tk.IntVar(value=255)
         self.solid_g_var = tk.IntVar(value=0)
         self.solid_b_var = tk.IntVar(value=0)
         
-        for label, var, color in [("Red", self.solid_r_var, "#ff0000"), 
-                                  ("Green", self.solid_g_var, "#00ff00"), 
-                                  ("Blue", self.solid_b_var, "#0000ff")]:
+        for label, var in [("R", self.solid_r_var), ("G", self.solid_g_var), ("B", self.solid_b_var)]:
             frame = ttk.Frame(self.rgb_solid_frame)
-            frame.pack(fill="x", pady=2)
-            ttk.Label(frame, text=f"{label}:", width=6).pack(side="left")
-            slider = ttk.Scale(frame, from_=0, to=255, orient="horizontal", variable=var)
-            slider.pack(side="left", fill="x", expand=True, padx=5)
-            value_label = ttk.Label(frame, text="255", width=4)
+            frame.pack(fill="x", pady=1)
+            ttk.Label(frame, text=f"{label}:", width=2).pack(side="left")
+            ttk.Scale(frame, from_=0, to=255, orient="horizontal", variable=var).pack(side="left", fill="x", expand=True, padx=2)
+            value_label = ttk.Label(frame, text="255", width=3)
             value_label.pack(side="left")
-            var.trace_add("write", lambda *args, lbl=value_label, v=var: 
-                         lbl.config(text=str(v.get())))
+            var.trace_add("write", lambda *args, lbl=value_label, v=var: lbl.config(text=str(v.get())))
         
         # HSV controls (hidden by default)
         self.hsv_solid_frame = ttk.Frame(solid_color_frame)
@@ -152,140 +157,113 @@ class LightningControlGUI:
         self.solid_s_var = tk.IntVar(value=255)
         self.solid_v_var = tk.IntVar(value=255)
         
-        for label, var, max_val in [("Hue", self.solid_h_var, 255), 
-                                    ("Saturation", self.solid_s_var, 255), 
-                                    ("Value", self.solid_v_var, 255)]:
+        for label, var in [("H", self.solid_h_var), ("S", self.solid_s_var), ("V", self.solid_v_var)]:
             frame = ttk.Frame(self.hsv_solid_frame)
-            frame.pack(fill="x", pady=2)
-            ttk.Label(frame, text=f"{label}:", width=10).pack(side="left")
-            slider = ttk.Scale(frame, from_=0, to=max_val, orient="horizontal", variable=var)
-            slider.pack(side="left", fill="x", expand=True, padx=5)
-            value_label = ttk.Label(frame, text=str(var.get()), width=4)
+            frame.pack(fill="x", pady=1)
+            ttk.Label(frame, text=f"{label}:", width=2).pack(side="left")
+            ttk.Scale(frame, from_=0, to=255, orient="horizontal", variable=var).pack(side="left", fill="x", expand=True, padx=2)
+            value_label = ttk.Label(frame, text=str(var.get()), width=3)
             value_label.pack(side="left")
-            var.trace_add("write", lambda *args, lbl=value_label, v=var: 
-                         lbl.config(text=str(v.get())))
+            var.trace_add("write", lambda *args, lbl=value_label, v=var: lbl.config(text=str(v.get())))
         
         # Preset controls (hidden by default)
         self.preset_solid_frame = ttk.Frame(solid_color_frame)
         
-        ttk.Label(self.preset_solid_frame, text="Preset Color:").pack(side="left", padx=5)
         self.preset_color_var = tk.StringVar(value="red")
         preset_colors = ["red", "green", "blue", "white", "yellow", "cyan", "magenta", 
-                        "orange", "purple", "pink", "lime", "aqua", "navy", "teal", 
-                        "olive", "maroon", "silver", "gray", "gold", "indigo", "violet",
-                        "brown", "crimson", "coral", "turquoise", "salmon", "khaki", 
-                        "plum", "orchid", "black"]
+                        "orange", "purple", "pink", "lime", "aqua", "navy", "teal"]
         ttk.Combobox(self.preset_solid_frame, textvariable=self.preset_color_var, 
-                    values=preset_colors, state="readonly", width=15).pack(side="left", padx=5)
+                    values=preset_colors, state="readonly", width=10).pack(fill="x", padx=2)
         
-        # Solid color action buttons
+        # Solid color buttons
         solid_btn_frame = ttk.Frame(solid_color_frame)
-        solid_btn_frame.pack(fill="x", pady=5)
+        solid_btn_frame.pack(fill="x", pady=2)
         
-        ttk.Button(solid_btn_frame, text="Set Selected Segment", 
-                  command=self.set_solid_color).pack(side="left", padx=5, expand=True, fill="x")
-        ttk.Button(solid_btn_frame, text="Set All Segments", 
-                  command=self.set_solid_color_all).pack(side="left", padx=5, expand=True, fill="x")
+        ttk.Button(solid_btn_frame, text="Set Segment", 
+                  command=self.set_solid_color).pack(side="left", padx=2, expand=True, fill="x")
+        ttk.Button(solid_btn_frame, text="Set All", 
+                  command=self.set_solid_color_all).pack(side="left", padx=2, expand=True, fill="x")
         
-        # ===== CCT White Controls =====
-        cct_white_frame = ttk.LabelFrame(self.root, text="CCT White Control (Static Strips)", padding=10)
-        cct_white_frame.pack(fill="x", padx=10, pady=5)
+        # CCT White Controls (compact)
+        cct_white_frame = ttk.LabelFrame(left_column, text="CCT White", padding=5)
+        cct_white_frame.pack(fill="x", pady=(0, 5))
         
-        # CCT Temperature slider (2700K - 6000K)
+        # Temperature
         cct_temp_frame = ttk.Frame(cct_white_frame)
-        cct_temp_frame.pack(fill="x", pady=5)
-        
-        ttk.Label(cct_temp_frame, text="Temperature:", width=12).pack(side="left")
+        cct_temp_frame.pack(fill="x", pady=1)
+        ttk.Label(cct_temp_frame, text="Temp:", width=5).pack(side="left")
         self.cct_temp_var = tk.IntVar(value=3500)
-        cct_temp_slider = ttk.Scale(cct_temp_frame, from_=2700, to=6000, orient="horizontal", 
-                                    variable=self.cct_temp_var)
-        cct_temp_slider.pack(side="left", fill="x", expand=True, padx=5)
-        self.cct_temp_label = ttk.Label(cct_temp_frame, text="3500K", width=8)
+        ttk.Scale(cct_temp_frame, from_=2700, to=6000, orient="horizontal", 
+                 variable=self.cct_temp_var).pack(side="left", fill="x", expand=True, padx=2)
+        self.cct_temp_label = ttk.Label(cct_temp_frame, text="3500K", width=6)
         self.cct_temp_label.pack(side="left")
         self.cct_temp_var.trace_add("write", lambda *args: 
                                    self.cct_temp_label.config(text=f"{self.cct_temp_var.get()}K"))
         
-        # CCT Intensity slider (0-100%)
-        cct_intensity_frame = ttk.Frame(cct_white_frame)
-        cct_intensity_frame.pack(fill="x", pady=5)
-        
-        ttk.Label(cct_intensity_frame, text="Intensity:", width=12).pack(side="left")
+        # Intensity
+        cct_int_frame = ttk.Frame(cct_white_frame)
+        cct_int_frame.pack(fill="x", pady=1)
+        ttk.Label(cct_int_frame, text="Int:", width=5).pack(side="left")
         self.cct_intensity_var = tk.DoubleVar(value=1.0)
-        cct_intensity_slider = ttk.Scale(cct_intensity_frame, from_=0.0, to=1.0, orient="horizontal", 
-                                        variable=self.cct_intensity_var)
-        cct_intensity_slider.pack(side="left", fill="x", expand=True, padx=5)
-        self.cct_intensity_label = ttk.Label(cct_intensity_frame, text="100%", width=8)
+        ttk.Scale(cct_int_frame, from_=0.0, to=1.0, orient="horizontal", 
+                 variable=self.cct_intensity_var).pack(side="left", fill="x", expand=True, padx=2)
+        self.cct_intensity_label = ttk.Label(cct_int_frame, text="100%", width=6)
         self.cct_intensity_label.pack(side="left")
         self.cct_intensity_var.trace_add("write", lambda *args: 
                                         self.cct_intensity_label.config(text=f"{int(self.cct_intensity_var.get()*100)}%"))
         
-        # CCT preset buttons
+        # CCT presets (compact)
         cct_preset_frame = ttk.Frame(cct_white_frame)
-        cct_preset_frame.pack(fill="x", pady=5)
+        cct_preset_frame.pack(fill="x", pady=2)
         
-        ttk.Label(cct_preset_frame, text="Presets:").pack(side="left", padx=5)
-        cct_presets = [
-            ("Warm", 2700),
-            ("Incandescent", 3000),
-            ("Neutral", 3500),
-            ("Cool White", 4000),
-            ("Daylight", 5000),
-            ("Cool", 6000)
-        ]
+        cct_presets = [("Warm", 2700), ("Neutral", 3500), ("Cool", 6000)]
         for name, temp in cct_presets:
-            ttk.Button(cct_preset_frame, text=name, width=12,
-                      command=lambda t=temp: self.set_cct_preset(t)).pack(side="left", padx=2)
+            ttk.Button(cct_preset_frame, text=name, width=7,
+                      command=lambda t=temp: self.set_cct_preset(t)).pack(side="left", padx=1)
         
-        # CCT action button
-        cct_btn_frame = ttk.Frame(cct_white_frame)
-        cct_btn_frame.pack(fill="x", pady=5)
+        ttk.Button(cct_white_frame, text="Apply CCT", 
+                  command=self.send_cct_white).pack(fill="x", pady=2)
         
-        ttk.Button(cct_btn_frame, text="Apply CCT White", 
-                  command=self.send_cct_white).pack(fill="x", padx=5)
+        # ===== RIGHT COLUMN =====
+        right_column = ttk.Frame(self.root)
+        right_column.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
         
-        # ===== Color Selection =====
-        color_frame = ttk.LabelFrame(self.root, text="Lightning Flash Color", padding=10)
-        color_frame.pack(fill="x", padx=10, pady=5)
+        # Lightning Flash Color (compact)
+        color_frame = ttk.LabelFrame(right_column, text="Lightning Color", padding=5)
+        color_frame.pack(fill="x", pady=(0, 5))
         
-        # Color preview
-        color_preview_frame = ttk.Frame(color_frame)
-        color_preview_frame.pack(fill="x", pady=5)
+        # Color preview and picker
+        color_top = ttk.Frame(color_frame)
+        color_top.pack(fill="x", pady=2)
         
-        self.color_preview = tk.Canvas(color_preview_frame, width=100, height=40, bg="white", 
-                                      highlightthickness=2, highlightbackground="gray")
-        self.color_preview.pack(side="left", padx=5)
+        self.color_preview = tk.Canvas(color_top, width=60, height=30, bg="white", 
+                                      highlightthickness=1, highlightbackground="gray")
+        self.color_preview.pack(side="left", padx=2)
         
-        ttk.Button(color_preview_frame, text="Choose Color", 
-                  command=self.choose_color).pack(side="left", padx=5)
+        ttk.Button(color_top, text="Pick Color", 
+                  command=self.choose_color).pack(side="left", padx=2)
         
-        self.color_label = ttk.Label(color_preview_frame, text="RGB(255, 255, 255)", 
-                                    font=("Arial", 9))
-        self.color_label.pack(side="left", padx=10)
+        self.color_label = ttk.Label(color_top, text="RGB(255,255,255)", font=("Arial", 8))
+        self.color_label.pack(side="left", padx=5)
         
-        # RGB sliders
-        ttk.Label(color_frame, text="Or use sliders:").pack(anchor="w", pady=(10, 5))
-        
+        # RGB sliders (compact)
         self.r_var = tk.IntVar(value=255)
         self.g_var = tk.IntVar(value=255)
         self.b_var = tk.IntVar(value=255)
         
-        for label, var, color in [("Red", self.r_var, "#ff0000"), 
-                                  ("Green", self.g_var, "#00ff00"), 
-                                  ("Blue", self.b_var, "#0000ff")]:
+        for label, var in [("R", self.r_var), ("G", self.g_var), ("B", self.b_var)]:
             frame = ttk.Frame(color_frame)
-            frame.pack(fill="x", pady=2)
-            ttk.Label(frame, text=f"{label}:", width=6).pack(side="left")
-            slider = ttk.Scale(frame, from_=0, to=255, orient="horizontal", variable=var,
-                             command=lambda v, var=var: self.update_color_preview())
-            slider.pack(side="left", fill="x", expand=True, padx=5)
-            value_label = ttk.Label(frame, text="255", width=4)
+            frame.pack(fill="x", pady=1)
+            ttk.Label(frame, text=f"{label}:", width=2).pack(side="left")
+            ttk.Scale(frame, from_=0, to=255, orient="horizontal", variable=var,
+                     command=lambda v, var=var: self.update_color_preview()).pack(side="left", fill="x", expand=True, padx=2)
+            value_label = ttk.Label(frame, text="255", width=3)
             value_label.pack(side="left")
-            var.trace_add("write", lambda *args, lbl=value_label, v=var: 
-                         lbl.config(text=str(v.get())))
+            var.trace_add("write", lambda *args, lbl=value_label, v=var: lbl.config(text=str(v.get())))
         
-        # ===== Timing Controls =====
-        timing_frame = ttk.LabelFrame(self.root, text="Lightning Timing (milliseconds)", padding=10)
-        timing_frame.pack(fill="x", padx=10, pady=5)
+        # Timing Controls (compact)
+        timing_frame = ttk.LabelFrame(right_column, text="Timing (ms)", padding=5)
+        timing_frame.pack(fill="x", pady=(0, 5))
         
         self.attack_var = tk.IntVar(value=50)
         self.plateau_var = tk.IntVar(value=100)
@@ -295,98 +273,96 @@ class LightningControlGUI:
                                     ("Plateau", self.plateau_var, 100),
                                     ("Release", self.release_var, 200)]:
             frame = ttk.Frame(timing_frame)
-            frame.pack(fill="x", pady=2)
-            ttk.Label(frame, text=f"{label}:", width=10).pack(side="left")
-            slider = ttk.Scale(frame, from_=10, to=500, orient="horizontal", variable=var)
-            slider.pack(side="left", fill="x", expand=True, padx=5)
-            value_label = ttk.Label(frame, text=f"{default}ms", width=6)
+            frame.pack(fill="x", pady=1)
+            ttk.Label(frame, text=f"{label}:", width=7).pack(side="left")
+            ttk.Scale(frame, from_=10, to=500, orient="horizontal", variable=var).pack(side="left", fill="x", expand=True, padx=2)
+            value_label = ttk.Label(frame, text=f"{default}ms", width=5)
             value_label.pack(side="left")
             var.trace_add("write", lambda *args, lbl=value_label, v=var: 
                          lbl.config(text=f"{v.get()}ms"))
         
-        # ===== Intensity Control =====
-        intensity_frame = ttk.LabelFrame(self.root, text="Lightning Intensity", padding=10)
-        intensity_frame.pack(fill="x", padx=10, pady=5)
+        # Intensity
+        intensity_frame = ttk.LabelFrame(right_column, text="Intensity", padding=5)
+        intensity_frame.pack(fill="x", pady=(0, 5))
         
         self.intensity_var = tk.DoubleVar(value=1.0)
         
         frame = ttk.Frame(intensity_frame)
-        frame.pack(fill="x", pady=2)
-        ttk.Label(frame, text="Intensity:", width=10).pack(side="left")
-        slider = ttk.Scale(frame, from_=0.1, to=1.0, orient="horizontal", variable=self.intensity_var)
-        slider.pack(side="left", fill="x", expand=True, padx=5)
-        self.intensity_label = ttk.Label(frame, text="100%", width=6)
+        frame.pack(fill="x", pady=1)
+        ttk.Label(frame, text="Level:", width=7).pack(side="left")
+        ttk.Scale(frame, from_=0.1, to=1.0, orient="horizontal", variable=self.intensity_var).pack(side="left", fill="x", expand=True, padx=2)
+        self.intensity_label = ttk.Label(frame, text="100%", width=5)
         self.intensity_label.pack(side="left")
         self.intensity_var.trace_add("write", lambda *args: 
                                     self.intensity_label.config(text=f"{int(self.intensity_var.get()*100)}%"))
         
-        # ===== Action Buttons =====
-        button_frame = ttk.Frame(self.root, padding=10)
-        button_frame.pack(fill="x", padx=10, pady=10)
+        # Action Buttons
+        button_frame = ttk.LabelFrame(right_column, text="Actions", padding=5)
+        button_frame.pack(fill="x", pady=(0, 5))
         
-        # Strike button (large and prominent)
-        strike_btn = ttk.Button(button_frame, text="⚡ STRIKE LIGHTNING ⚡", 
-                               command=self.strike_lightning)
-        strike_btn.pack(fill="x", pady=5, ipady=10)
+        # Strike button
+        ttk.Button(button_frame, text="⚡ STRIKE LIGHTNING ⚡", 
+                  command=self.strike_lightning).pack(fill="x", pady=2, ipady=5)
         
-        # Utility buttons
-        utility_frame = ttk.Frame(button_frame)
-        utility_frame.pack(fill="x", pady=5)
+        # Utility buttons row
+        util_frame = ttk.Frame(button_frame)
+        util_frame.pack(fill="x", pady=2)
         
-        ttk.Button(utility_frame, text="Reset LEDs", 
-                  command=self.reset_leds).pack(side="left", padx=5, expand=True, fill="x")
+        ttk.Button(util_frame, text="Reset", 
+                  command=self.reset_leds).pack(side="left", padx=1, expand=True, fill="x")
+        ttk.Button(util_frame, text="Storm", 
+                  command=self.quick_storm).pack(side="left", padx=1, expand=True, fill="x")
+        ttk.Button(util_frame, text="Test All", 
+                  command=self.test_all_segments).pack(side="left", padx=1, expand=True, fill="x")
         
-        ttk.Button(utility_frame, text="Quick Storm", 
-                  command=self.quick_storm).pack(side="left", padx=5, expand=True, fill="x")
+        # Random Flash Effects (compact)
+        random_frame = ttk.LabelFrame(right_column, text="Random Flash", padding=5)
+        random_frame.pack(fill="x", pady=(0, 5))
         
-        ttk.Button(utility_frame, text="Test All Segments", 
-                  command=self.test_all_segments).pack(side="left", padx=5, expand=True, fill="x")
+        # Intensity selector
+        int_frame = ttk.Frame(random_frame)
+        int_frame.pack(fill="x", pady=2)
         
-        # Random flash buttons
-        random_frame = ttk.LabelFrame(button_frame, text="Random Flash Effects", padding=5)
-        random_frame.pack(fill="x", pady=5)
-        
-        # Intensity selector for random flashes
-        intensity_select_frame = ttk.Frame(random_frame)
-        intensity_select_frame.pack(fill="x", pady=5)
-        
-        ttk.Label(intensity_select_frame, text="Random Intensity (1-10):").pack(side="left", padx=5)
+        ttk.Label(int_frame, text="Intensity:", width=7).pack(side="left")
         self.random_intensity_var = tk.IntVar(value=5)
-        ttk.Scale(intensity_select_frame, from_=1, to=10, orient="horizontal", 
-                 variable=self.random_intensity_var).pack(side="left", fill="x", expand=True, padx=5)
-        self.random_intensity_label = ttk.Label(intensity_select_frame, text="5", width=3)
+        ttk.Scale(int_frame, from_=1, to=10, orient="horizontal", 
+                 variable=self.random_intensity_var).pack(side="left", fill="x", expand=True, padx=2)
+        self.random_intensity_label = ttk.Label(int_frame, text="5", width=3)
         self.random_intensity_label.pack(side="left")
         self.random_intensity_var.trace_add("write", lambda *args: 
                                            self.random_intensity_label.config(text=str(self.random_intensity_var.get())))
         
-        random_btn_frame = ttk.Frame(random_frame)
-        random_btn_frame.pack(fill="x", pady=5)
+        # Random buttons
+        btn_frame = ttk.Frame(random_frame)
+        btn_frame.pack(fill="x", pady=2)
         
-        ttk.Button(random_btn_frame, text="Random Segment Flash", 
-                  command=self.random_seg_flash).pack(side="left", padx=5, expand=True, fill="x")
+        ttk.Button(btn_frame, text="Rand Seg", 
+                  command=self.random_seg_flash).pack(side="left", padx=1, expand=True, fill="x")
+        ttk.Button(btn_frame, text="Rand LEDs", 
+                  command=self.random_flash).pack(side="left", padx=1, expand=True, fill="x")
+        ttk.Button(btn_frame, text="Full Flash", 
+                  command=self.full_flash).pack(side="left", padx=1, expand=True, fill="x")
         
-        ttk.Button(random_btn_frame, text="Random LEDs Flash", 
-                  command=self.random_flash).pack(side="left", padx=5, expand=True, fill="x")
-        
-        ttk.Button(random_btn_frame, text="⚡ FULL FLASH ⚡", 
-                  command=self.full_flash).pack(side="left", padx=5, expand=True, fill="x")
-        
-        # ===== Presets =====
-        preset_frame = ttk.LabelFrame(self.root, text="Quick Presets", padding=10)
-        preset_frame.pack(fill="x", padx=10, pady=5)
+        # Presets
+        preset_frame = ttk.LabelFrame(right_column, text="Quick Presets", padding=5)
+        preset_frame.pack(fill="x")
         
         presets = [
-            ("Slow Flash", 100, 200, 300, 1.0),
-            ("Quick Flash", 30, 50, 100, 1.0),
+            ("Slow", 100, 200, 300, 1.0),
+            ("Quick", 30, 50, 100, 1.0),
             ("Gentle", 80, 150, 250, 0.5),
             ("Intense", 20, 80, 120, 1.0),
         ]
         
         for i, (name, attack, plateau, release, intensity) in enumerate(presets):
+            row = i // 2
+            col = i % 2
             ttk.Button(preset_frame, text=name, 
                       command=lambda a=attack, p=plateau, r=release, i=intensity: 
-                      self.apply_preset(a, p, r, i)).grid(row=0, column=i, padx=5, pady=2, sticky="ew")
-            preset_frame.columnconfigure(i, weight=1)
+                      self.apply_preset(a, p, r, i)).grid(row=row, column=col, padx=2, pady=2, sticky="ew")
+        
+        preset_frame.columnconfigure(0, weight=1)
+        preset_frame.columnconfigure(1, weight=1)
     
     def update_color_preview(self):
         """Update color preview canvas when sliders change."""

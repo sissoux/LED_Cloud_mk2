@@ -116,6 +116,8 @@ void setupHardware();
 void processSerialCommand();
 void setSegmentColor(uint8_t segment, CRGB color);
 void setAllLEDs(CRGB color);
+void writeWarmWhitePWM(uint8_t value);
+void writeCoolWhitePWM(uint8_t value);
 void updateWhiteStrips(float warm, float cool);
 void safeDefaultState();
 void updateLightningAnimation();
@@ -213,8 +215,8 @@ void setupHardware() {
     ledcAttach(COOL_WHITE_PIN, PWM_FREQ, PWM_RESOLUTION);
     
     // Set white strips to off
-    ledcWrite(WARM_WHITE_PIN, 0);
-    ledcWrite(COOL_WHITE_PIN, 0);
+    writeWarmWhitePWM(0);
+    writeCoolWhitePWM(0);
     
 #ifdef DEMO_MODE
     Serial.println("Hardware initialized");
@@ -231,8 +233,8 @@ void safeDefaultState() {
     FastLED.show();
     
     // Turn off white strips
-    ledcWrite(WARM_WHITE_PIN, 0);
-    ledcWrite(COOL_WHITE_PIN, 0);
+    writeWarmWhitePWM(0);
+    writeCoolWhitePWM(0);
     warmWhiteBrightness = 0;
     coolWhiteBrightness = 0;
 }
@@ -658,8 +660,8 @@ void processSerialCommand() {
                 FastLED.show();
                 warmWhiteBrightness = warmBackup;
                 coolWhiteBrightness = coolBackup;
-                ledcWrite(WARM_WHITE_PIN, warmWhiteBrightness);
-                ledcWrite(COOL_WHITE_PIN, coolWhiteBrightness);
+                writeWarmWhitePWM(warmWhiteBrightness);
+                writeCoolWhitePWM(coolWhiteBrightness);
                 animationActive = false;
                 break;
             }
@@ -694,8 +696,8 @@ void processSerialCommand() {
             uint8_t whiteBrightness = (uint8_t)(finalBrightness * 255);
             warmWhiteBrightness = whiteBrightness;
             coolWhiteBrightness = whiteBrightness;
-            ledcWrite(WARM_WHITE_PIN, warmWhiteBrightness);
-            ledcWrite(COOL_WHITE_PIN, coolWhiteBrightness);
+            writeWarmWhitePWM(warmWhiteBrightness);
+            writeCoolWhitePWM(coolWhiteBrightness);
             
             delay(5);  // Small delay for smooth animation
         }
@@ -793,6 +795,30 @@ CRGB parsePresetColor(const char* preset) {
     return CRGB::White;
 }
 
+// ============================================================================
+// WHITE STRIP PWM HELPERS (with optional inversion)
+// ============================================================================
+
+void writeWarmWhitePWM(uint8_t value) {
+    // Write PWM value to warm white strip
+    // Inverts output if INVERT_WHITE_PWM is defined (for inverted hardware)
+#ifdef INVERT_WHITE_PWM
+    ledcWrite(WARM_WHITE_PIN, 255 - value);
+#else
+    ledcWrite(WARM_WHITE_PIN, value);
+#endif
+}
+
+void writeCoolWhitePWM(uint8_t value) {
+    // Write PWM value to cool white strip
+    // Inverts output if INVERT_WHITE_PWM is defined (for inverted hardware)
+#ifdef INVERT_WHITE_PWM
+    ledcWrite(COOL_WHITE_PIN, 255 - value);
+#else
+    ledcWrite(COOL_WHITE_PIN, value);
+#endif
+}
+
 void updateWhiteStrips(float warm, float cool) {
     // Clamp values to 0.0-1.0 range
     warm = constrain(warm, 0.0f, 1.0f);
@@ -803,8 +829,8 @@ void updateWhiteStrips(float warm, float cool) {
     coolWhiteBrightness = (uint8_t)(cool * 255);
     
     // Update PWM outputs
-    ledcWrite(WARM_WHITE_PIN, warmWhiteBrightness);
-    ledcWrite(COOL_WHITE_PIN, coolWhiteBrightness);
+    writeWarmWhitePWM(warmWhiteBrightness);
+    writeCoolWhitePWM(coolWhiteBrightness);
 }
 
 // ============================================================================
@@ -976,11 +1002,11 @@ void updateLightningAnimation() {
             } else if (lightning[slot].segment == SEGMENT_COOL_WHITE) {
                 // Cool white strip: restore previous brightness
                 coolWhiteBrightness = lightning[slot].coolWhiteBackup;
-                ledcWrite(COOL_WHITE_PIN, coolWhiteBrightness);
+                writeCoolWhitePWM(coolWhiteBrightness);
             } else if (lightning[slot].segment == SEGMENT_WARM_WHITE) {
                 // Warm white strip: restore previous brightness
                 warmWhiteBrightness = lightning[slot].warmWhiteBackup;
-                ledcWrite(WARM_WHITE_PIN, warmWhiteBrightness);
+                writeWarmWhitePWM(warmWhiteBrightness);
             }
             
             // Unblock the segment
@@ -1016,11 +1042,11 @@ void updateLightningAnimation() {
         } else if (lightning[slot].segment == SEGMENT_COOL_WHITE) {
             // Cool white strip: apply brightness to PWM
             uint8_t pwmValue = (uint8_t)(finalBrightness * 255);
-            ledcWrite(COOL_WHITE_PIN, pwmValue);
+            writeCoolWhitePWM(pwmValue);
         } else if (lightning[slot].segment == SEGMENT_WARM_WHITE) {
             // Warm white strip: apply brightness to PWM
             uint8_t pwmValue = (uint8_t)(finalBrightness * 255);
-            ledcWrite(WARM_WHITE_PIN, pwmValue);
+            writeWarmWhitePWM(pwmValue);
         }
     }
 }
